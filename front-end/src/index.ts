@@ -5,7 +5,8 @@ let app = new PIXI.Application({
   height: window.innerHeight,
   backgroundColor: 0xaaaaaa,
 });
-document.getElementById("game").appendChild(app.view);
+let gameDiv = document.getElementById("game");
+gameDiv.appendChild(app.view);
 
 enum Directions {
   DOWN = 0,
@@ -17,24 +18,28 @@ enum Directions {
 const loader = new PIXI.Loader();
 let player: PIXI.AnimatedSprite;
 let playerSpeed = 10;
+let fireballSpeed = playerSpeed * 5;
 let playerDirection = Directions.DOWN;
 let playerTextures = {};
 let mousePos = { x: app.view.width / 2, y: app.view.height / 2 };
 let keys = {};
+let fireBalls = [];
 
 let aimGraph = new PIXI.Graphics();
 app.stage.addChild(aimGraph);
 
 // * on ajoute la texture du player
 loader.add("player", "assets/player.png");
+loader.add("fireball", "assets/fireball.png");
 
 // * une fois que tout à finis de charger on lance le jeu
 loader.load(doneLoading);
 
 function doneLoading() {
-  console.log("finished loading player texture");
+  console.log("- * - finished loading player textures - * -");
   createPlayerAnimation();
   grabMouseAndKeyboard();
+  app.ticker.add((delta) => gameLoop(delta));
 }
 
 function createPlayerAnimation() {
@@ -82,11 +87,11 @@ function createPlayerAnimation() {
   });
 
   player = new PIXI.AnimatedSprite(playerTextures[Directions.DOWN]);
-  player.x = app.stage.width / 2;
-  player.y = app.stage.height / 2;
   player.anchor.set(0.5, 0.5);
   player.scale.set(4, 4);
   app.stage.addChild(player);
+  player.x = app.stage.width / 2;
+  player.y = app.stage.height / 2;
   player.animationSpeed = 0.1;
   player.play();
 }
@@ -100,6 +105,8 @@ function grabMouseAndKeyboard() {
     mousePos = { x, y };
   });
 
+  gameDiv.addEventListener("pointerdown", handleFireBallCast);
+
   // * keyboard handling
   window.addEventListener("keydown", (e) => {
     console.log("keydown : ", e.key);
@@ -111,6 +118,26 @@ function grabMouseAndKeyboard() {
     keys[e.key] = false;
     console.log("keyup : ", e.key);
   });
+}
+
+function handleFireBallCast(e) {
+  // * direction: vecteur entre le joueur et la ou vise le curseur
+  let radAngle = Math.atan2(mousePos.y - player.y, mousePos.x - player.x);
+  let direction = { x: Math.cos(radAngle), y: Math.sin(radAngle) };
+  let fireBall = createFireBall(direction, radAngle);
+  fireBalls.push(fireBall);
+}
+
+function createFireBall(direction, angle) {
+  let fireball = new PIXI.Sprite(loader.resources["fireball"].texture);
+  fireball.anchor.set(0.5);
+  fireball.scale.set(0.5);
+  // * part du player
+  fireball.x = player.x;
+  fireball.y = player.y;
+  fireball.rotation = angle;
+  app.stage.addChild(fireball);
+  return { sprite: fireball, direction, speed: fireballSpeed };
 }
 
 // * pour dessiner le pointeur entre le personnage et curseur
@@ -129,6 +156,15 @@ function changePlayerDirection(newDirection) {
   if (newDirection != playerDirection) {
     playerDirection = newDirection;
     player.textures = playerTextures[newDirection];
+  }
+}
+
+function updateFireBalls(delta) {
+  for (let k = 0; k < fireBalls.length; ++k) {
+    let { direction, speed } = fireBalls[k];
+    fireBalls[k].sprite.x += direction.x * speed * delta;
+    fireBalls[k].sprite.y += direction.y * speed * delta;
+    fireBalls[k].sprite.angle += 10 * delta;
   }
 }
 
@@ -155,11 +191,13 @@ function handleKeyboard(delta) {
       changePlayerDirection(Directions.RIGHT);
     }
   } else {
-    player.stop();
+    player.gotoAndStop(0);
   }
 }
 
-const gameLoop = (delta) => {
+function gameLoop(delta) {
+  //   console.log("temps écoulé depuis la dernière frame: ", delta);
+  updateFireBalls(delta);
   handleKeyboard(delta);
   drawAim();
-};
+}
