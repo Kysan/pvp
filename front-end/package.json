@@ -17,7 +17,10 @@
     "webpack-cli": "^4.3.1"
   },
   "dependencies": {
-    "pixi.js": "^5.3.7"
+    "@types/socket.io": "^2.1.12",
+    "pixi-sound": "^3.0.5",
+    "pixi.js": "^5.3.7",
+    "socket.io-client": "^3.0.5"
   },
   "description": ""
 }

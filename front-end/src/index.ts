@@ -1,4 +1,6 @@
 import * as PIXI from "pixi.js";
+import io from "socket.io-client";
+import pixiSound from "pixi-sound";
 
 let app = new PIXI.Application({
   width: window.innerWidth,
@@ -16,33 +18,68 @@ enum Directions {
 }
 
 const loader = new PIXI.Loader();
-let player: PIXI.AnimatedSprite;
-let playerSpeed = 10;
-let fireballSpeed = playerSpeed * 5;
-let playerDirection = Directions.DOWN;
-let playerTextures = {};
-let mousePos = { x: app.view.width / 2, y: app.view.height / 2 };
-let keys = {};
-let fireBalls = [];
 
-let aimGraph = new PIXI.Graphics();
-app.stage.addChild(aimGraph);
+// * params
+let playerSpeed = 10;
+let fireballSpeed = playerSpeed * 2;
+let playerDirection = Directions.DOWN;
+
+// * game object
+let player: PIXI.AnimatedSprite;
+let playerTextures = {};
+let ennemies = {};
+let fireBalls = [];
+let aimGraph: PIXI.Graphics;
+
+// * input management
+let keys = {};
+let mousePos = { x: app.view.width / 2, y: app.view.height / 2 };
+
+// * mutiplayer
+let socket;
 
 // * on ajoute la texture du player
 loader.add("player", "assets/player.png");
 loader.add("fireball", "assets/fireball.png");
+pixiSound.add("cyberpunk theme", "assets/cyberpunk.mp3");
 
 // * une fois que tout à finis de charger on lance le jeu
 loader.load(doneLoading);
 
+// * initialisation du jeu
 function doneLoading() {
-  console.log("- * - finished loading player textures - * -");
-  createPlayerAnimation();
+  console.log("- * - finished loading textures - * -");
+
+  // * on crée le joueur
+  player = createPlayerAnimation(app.view.width / 2, app.view.height / 2);
+  app.stage.addChild(player);
+
+  // * le viseur pour les sorts
+  aimGraph = new PIXI.Graphics();
+  app.stage.addChild(aimGraph);
+
+  // * on lance la musique de fond
+  pixiSound.play("cyberpunk theme", { loop: true });
+  pixiSound.volume("cyberpunk theme", 0.01);
+
+  // * on lance la logique du jeu
   grabMouseAndKeyboard();
   app.ticker.add((delta) => gameLoop(delta));
+
+  // * on lance la logique du multijoueur
+  handleMultiplayerLogic();
 }
 
-function createPlayerAnimation() {
+function handleMultiplayerLogic() {
+  socket = io.io(document.location.href);
+  socket.on("connect", function () {
+    console.log("connected");
+  });
+  socket.on("event", function (data) {});
+  socket.on("disconnect", function () {});
+}
+
+function createPlayerAnimation(x, y) {
   const playerTexture = new PIXI.BaseTexture(loader.resources["player"].url);
 
   // * taille d'une image
@@ -86,23 +123,28 @@ function createPlayerAnimation() {
     return texture;
   });
 
-  player = new PIXI.AnimatedSprite(playerTextures[Directions.DOWN]);
+  let player = new PIXI.AnimatedSprite(playerTextures[Directions.DOWN]);
+
   player.anchor.set(0.5, 0.5);
   player.scale.set(4, 4);
-  app.stage.addChild(player);
-  player.x = app.stage.width / 2;
-  player.y = app.stage.height / 2;
+
+  player.position.set(x, y);
   player.animationSpeed = 0.1;
   player.play();
+  return player;
 }
 
 function grabMouseAndKeyboard() {
   // * mouse handling
   app.stage.interactive = true;
+  document.addEventListener("contextmenu", (event) => event.preventDefault());
   app.stage.on("pointermove", (e) => {
+    // * ce n'est pas possible de centrer la texture du curseur donc on doit le faire manuellement
+    let [w, h] = [32 / 2, 32 / 2];
+
     let { x, y } = e.data.global;
     // console.log(mousePos)
-    mousePos = { x, y };
+    mousePos = { x: x + w, y: y + h };
   });
 
   gameDiv.addEventListener("pointerdown", handleFireBallCast);
@@ -131,7 +173,7 @@ function handleFireBallCast(e) {
 function createFireBall(direction, angle) {
   let fireball = new PIXI.Sprite(loader.resources["fireball"].texture);
   fireball.anchor.set(0.5);
-  fireball.scale.set(0.5);
+  fireball.scale.set(0.3);
   // * part du player
   fireball.x = player.x;
   fireball.y = player.y;
@@ -140,17 +182,36 @@ function createFireBall(direction, angle) {
   return { sprite: fireball, direction, speed: fireballSpeed };
 }
 
-// * pour dessiner le pointeur entre le personnage et curseur
-const drawAim = () => {
-  // * ne peux pas fonctionner si le player n'existe pas encore
-  if (player) {
-    aimGraph.clear();
-    aimGraph
-      .lineStyle(10)
-      .moveTo(player.x, player.y)
-      .lineTo(mousePos.x, mousePos.y);
-  }
-};
+function norme(x, y) {
+  return Math.sqrt(x * x + y * y);
+}
+
+function normalize(vect) {
+  let n /*igger*/ = norme(vect.x, vect.y);
+  return { x: vect.x / n, y: vect.y / n };
+}
+
+function scale(vect, size) {
+  return { x: vect.x * size, y: vect.y * size };
+}
+
+// * pour dessiner le pointeur entre le player et curseur
+function drawAim() {
+  let p1 = { x: player.x, y: player.y };
+  let p2 = { x: mousePos.x, y: mousePos.y };
+
+  let dir = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+  let vect = { x: Math.cos(dir), y: Math.sin(dir) };
+  // vec = normalize(vec);
+  let offset = scale(vect, 100);
+  let offset2 = scale(vect, 500);
+  // console.log(offset.x, offset.y);
+  aimGraph.clear();
+  aimGraph
+    .lineStyle(5)
+    .moveTo(player.x + offset.x, player.y + offset.y)
+    .lineTo(player.x + offset2.x, player.y + offset2.y);
+}
 
 function changePlayerDirection(newDirection) {
   if (newDirection != playerDirection) {
@@ -159,12 +220,29 @@ function changePlayerDirection(newDirection) {
   }
 }
 
+function isSpriteOutOfScreen(sprite) {
+  let outOfScreen =
+    sprite.x + sprite.width * sprite.anchor.x < 0 ||
+    sprite.x - sprite.width * sprite.anchor.x > app.view.width ||
+    sprite.y + sprite.height * sprite.anchor.y < 0 ||
+    sprite.y - sprite.height * sprite.anchor.y > app.view.height;
+  return outOfScreen;
+}
+
 function updateFireBalls(delta) {
   for (let k = 0; k < fireBalls.length; ++k) {
-    let { direction, speed } = fireBalls[k];
-    fireBalls[k].sprite.x += direction.x * speed * delta;
-    fireBalls[k].sprite.y += direction.y * speed * delta;
-    fireBalls[k].sprite.angle += 10 * delta;
+    let { direction, speed, sprite } = fireBalls[k];
+    sprite.x += direction.x * speed * delta;
+    sprite.y += direction.y * speed * delta;
+    sprite.angle += 20 * delta;
+
+    // * il faut les enlever si elles sortent de l'écran
+
+    if (isSpriteOutOfScreen(sprite)) {
+      app.stage.removeChild(fireBalls[k].sprite);
+      let i = fireBalls.indexOf(sprite);
+      fireBalls.slice(i, 1); // * on enlève l'element à l'indexe i
+    }
   }
 }
 

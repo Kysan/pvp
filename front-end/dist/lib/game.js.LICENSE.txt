@@ -13,6 +13,14 @@ object-assign
  */
 
 /*!
+ * @pixi/constants - v5.3.7
+ * Compiled Tue, 29 Dec 2020 19:30:11 UTC
+ *
+ * @pixi/constants is licensed under the MIT License.
+ * http://www.opensource.org/licenses/mit-license
+ */
+
+/*!
  * @pixi/core - v5.3.7
  * Compiled Tue, 29 Dec 2020 19:30:11 UTC
  *
@@ -41,14 +49,6 @@ object-assign
  * Compiled Tue, 29 Dec 2020 19:30:11 UTC
  *
  * @pixi/filter-displacement is licensed under the MIT License.
- * http://www.opensource.org/licenses/mit-license
- */
-
-/*!
- * @pixi/loaders - v5.3.7
- * Compiled Tue, 29 Dec 2020 19:30:11 UTC
- *
- * @pixi/loaders is licensed under the MIT License.
  * http://www.opensource.org/licenses/mit-license
  */
 
@@ -97,6 +97,14 @@ object-assign
  * Compiled Tue, 29 Dec 2020 19:30:11 UTC
  *
  * @pixi/prepare is licensed under the MIT License.
+ * http://www.opensource.org/licenses/mit-license
+ */
+
+/*!
+ * @pixi/runner - v5.3.7
+ * Compiled Tue, 29 Dec 2020 19:30:11 UTC
+ *
+ * @pixi/runner is licensed under the MIT License.
  * http://www.opensource.org/licenses/mit-license
  */
 
