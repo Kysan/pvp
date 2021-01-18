@@ -46,6 +46,7 @@ var fireballs = [];
 // * gestion de la connexion avec un client
 socketServer.on("connection", function (socket) {
     var connectedToRoom = false;
+    var player;
     // * ping pour détecter les déconnexions ou les AFK
     // *              /!\ system de ping incorrecte /!\
     // * (il peut juste envoyer pong en boucle et ça vas lui rajouter du ttl)
@@ -56,7 +57,8 @@ socketServer.on("connection", function (socket) {
     // * rajouter un id de salon ?
     socket.on("join", function (username) {
         try {
-            var player = new Player_1.default(username);
+            var pos = Utils_1.genRandomPos();
+            player = new Player_1.default(pos.x, pos.y, username);
             pid = player.getID();
             players[pid] = player;
             socket.broadcast.emit("player connected", player[pid].mapToNetwork());
@@ -97,13 +99,16 @@ socketServer.on("connection", function (socket) {
             if (connectedToRoom)
                 socket.broadcast.emit("disconnected", pid);
             socket.emit("bye");
+            player = undefined;
             return;
         }
         // * temps écoulé depuis la dernière boucle
         var now = Utils_1.getTimestamp();
         var delta = before - now;
         before = now; // * pour la prochaine boucle
-        gameLoop(delta);
+        // * seulement si je pplayer à été instancié
+        if (connectedToRoom)
+            gameLoop(delta);
     }
     function gameLoop(delta) {
         var player = players[pid];

@@ -1,31 +1,26 @@
 import * as PIXI from "pixi.js";
 import io from "socket.io-client";
 import pixiSound from "pixi-sound";
+import Character, { Direction } from "./Character";
+import AnimationManager from "./AnimationManager";
 
 let app = new PIXI.Application({
   width: window.innerWidth,
   height: window.innerHeight,
   backgroundColor: 0xaaaaaa,
 });
+
 let gameDiv = document.getElementById("game");
 gameDiv.appendChild(app.view);
-
-enum Directions {
-  DOWN = 0,
-  LEFT = 1,
-  RIGHT = 2,
-  UP = 3,
-}
 
 const loader = new PIXI.Loader();
 
 // * params
 let playerSpeed = 10;
 let fireballSpeed = playerSpeed * 2;
-let playerDirection = Directions.DOWN;
 
 // * game object
-let player: PIXI.AnimatedSprite;
+let player: Character;
 let playerTextures = {};
 let ennemies = {};
 let fireBalls = [];
@@ -51,7 +46,12 @@ function doneLoading() {
   console.log("- * - finished loading textures - * -");
 
   // * on crée le joueur
-  player = createPlayerAnimation(app.view.width / 2, app.view.height / 2);
+  player = new Character(
+    app.view.width / 2,
+    app.view.height / 2,
+    new AnimationManager(loader.resources["player"]),
+    "Kysan(updatethis)"
+  );
   app.stage.addChild(player);
 
   // * le viseur pour les sorts
@@ -59,8 +59,8 @@ function doneLoading() {
   app.stage.addChild(aimGraph);
 
   // * on lance la musique de fond
-  pixiSound.play("cyberpunk theme", { loop: true });
-  pixiSound.volume("cyberpunk theme", 0.01);
+  // pixiSound.play("cyberpunk theme", { loop: true });
+  // pixiSound.volume("cyberpunk theme", 0.01);
 
   // * on lance la logique du jeu
   grabMouseAndKeyboard();
@@ -77,61 +77,6 @@ function handleMultiplayerLogic() {
   });
   socket.on("event", function (data) {});
   socket.on("disconnect", function () {});
-}
-
-function createPlayerAnimation(x, y) {
-  const playerTexture = new PIXI.BaseTexture(loader.resources["player"].url);
-
-  // * taille d'une image
-  const [w, h] = [96 / 3, 128 / 4];
-
-  // * je peux le raccourcir en 2 lignes mais je le fais pas pour que ça reste comprehensible
-
-  playerTextures[Directions.DOWN] = [0, 1, 2].map((frameNumber) => {
-    let texture = new PIXI.Texture(
-      playerTexture,
-      new PIXI.Rectangle(w * frameNumber, h * Directions.DOWN, w, h)
-    );
-    texture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST; // * pixel art
-    return texture;
-  });
-
-  playerTextures[Directions.LEFT] = [0, 1, 2].map((frameNumber) => {
-    let texture = new PIXI.Texture(
-      playerTexture,
-      new PIXI.Rectangle(w * frameNumber, h * Directions.LEFT, w, h)
-    );
-    texture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST; // * pixel art
-    return texture;
-  });
-
-  playerTextures[Directions.RIGHT] = [0, 1, 2].map((frameNumber) => {
-    let texture = new PIXI.Texture(
-      playerTexture,
-      new PIXI.Rectangle(w * frameNumber, h * Directions.RIGHT, w, h)
-    );
-    texture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST; // * pixel art
-    return texture;
-  });
-
-  playerTextures[Directions.UP] = [0, 1, 2].map((frameNumber) => {
-    let texture = new PIXI.Texture(
-      playerTexture,
-      new PIXI.Rectangle(w * frameNumber, h * Directions.UP, w, h)
-    );
-    texture.baseTexture.scaleMode = PIXI.SCALE_MODES.NEAREST; // * pixel art
-    return texture;
-  });
-
-  let player = new PIXI.AnimatedSprite(playerTextures[Directions.DOWN]);
-
-  player.anchor.set(0.5, 0.5);
-  player.scale.set(4, 4);
-
-  player.position.set(x, y);
-  player.animationSpeed = 0.1;
-  player.play();
-  return player;
 }
 
 function grabMouseAndKeyboard() {
@@ -213,13 +158,6 @@ function drawAim() {
     .lineTo(player.x + offset2.x, player.y + offset2.y);
 }
 
-function changePlayerDirection(newDirection) {
-  if (newDirection != playerDirection) {
-    playerDirection = newDirection;
-    player.textures = playerTextures[newDirection];
-  }
-}
-
 function isSpriteOutOfScreen(sprite) {
   let outOfScreen =
     sprite.x + sprite.width * sprite.anchor.x < 0 ||
@@ -254,19 +192,19 @@ function handleKeyboard(delta) {
 
     if (keys["z"]) {
       player.y -= playerSpeed * delta;
-      changePlayerDirection(Directions.UP);
+      player.setDirection(Direction.UP);
     }
     if (keys["q"]) {
       player.x -= playerSpeed * delta;
-      changePlayerDirection(Directions.LEFT);
+      player.setDirection(Direction.LEFT);
     }
     if (keys["s"]) {
       player.y += playerSpeed * delta;
-      changePlayerDirection(Directions.DOWN);
+      player.setDirection(Direction.DOWN);
     }
     if (keys["d"]) {
       player.x += playerSpeed * delta;
-      changePlayerDirection(Directions.RIGHT);
+      player.setDirection(Direction.RIGHT);
     }
   } else {
     player.gotoAndStop(0);

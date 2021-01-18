@@ -2,7 +2,7 @@ import path from "path";
 import express from "express";
 import http from "http";
 import Player, { PlayerDirection, PlayerState } from "./Player";
-import { getTimestamp } from "./Utils";
+import { genRandomPos, getTimestamp } from "./Utils";
 import { Socket } from "socket.io";
 
 const app = express();
@@ -29,7 +29,7 @@ let fireballs = [];
 // * gestion de la connexion avec un client
 socketServer.on("connection", (socket: Socket) => {
   let connectedToRoom = false;
-
+  let player;
   // * ping pour détecter les déconnexions ou les AFK
   // *              /!\ system de ping incorrecte /!\
   // * (il peut juste envoyer pong en boucle et ça vas lui rajouter du ttl)
@@ -41,7 +41,8 @@ socketServer.on("connection", (socket: Socket) => {
   // * rajouter un id de salon ?
   socket.on("join", (username) => {
     try {
-      let player = new Player(username);
+      let pos = genRandomPos();
+      player = new Player(pos.x, pos.y, username);
       pid = player.getID();
       players[pid] = player;
 
@@ -86,6 +87,7 @@ socketServer.on("connection", (socket: Socket) => {
     if (ttl <= 0) {
       if (connectedToRoom) socket.broadcast.emit("disconnected", pid);
       socket.emit("bye");
+      player = undefined;
       return;
     }
 
@@ -93,7 +95,8 @@ socketServer.on("connection", (socket: Socket) => {
     let now = getTimestamp();
     let delta = before - now;
     before = now; // * pour la prochaine boucle
-    gameLoop(delta);
+    // * seulement si je pplayer à été instancié
+    if (connectedToRoom) gameLoop(delta);
   }
 
   function gameLoop(delta) {

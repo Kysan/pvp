@@ -21,7 +21,12 @@ class Player {
   private speed: number;
   private alive: boolean;
 
-  constructor(username: string, id: string = genRandomID()) {
+  constructor(
+    x: number,
+    y: number,
+    username: string,
+    id: string = genRandomID()
+  ) {
     if (username == undefined) throw "error : no username given";
     if (typeof username != "string" || username.length > 10)
       throw "error : username is invalid";
@@ -29,7 +34,7 @@ class Player {
     this.id = id;
 
     // * faire en fonciton de spawn points ?
-    this.position = genRandomPos();
+    this.position = { x, y };
 
     // * devrais être chargé depuis un fichier de configuration
     this.speed = 10;
@@ -77,7 +82,7 @@ class Player {
   }
 
   // * convertie l'objet en json plus simple
-  mapToNetwork(): any {
+  public mapToNetwork(): any {
     let { id, username, position, state, direction } = this;
     return { id, username, position, state, direction };
   }

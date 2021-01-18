@@ -17,7 +17,7 @@ var PlayerDirection;
 })(PlayerDirection || (PlayerDirection = {}));
 exports.PlayerDirection = PlayerDirection;
 var Player = /** @class */ (function () {
-    function Player(username, id) {
+    function Player(x, y, username, id) {
         if (id === void 0) { id = Utils_1.genRandomID(); }
         if (username == undefined)
             throw "error : no username given";
@@ -26,7 +26,7 @@ var Player = /** @class */ (function () {
         this.username = username;
         this.id = id;
         // * faire en fonciton de spawn points ?
-        this.position = Utils_1.genRandomPos();
+        this.position = { x: x, y: y };
         // * devrais être chargé depuis un fichier de configuration
         this.speed = 10;
         // * devrais être remplacer par des points de vie ?
