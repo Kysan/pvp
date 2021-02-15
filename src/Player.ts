@@ -27,9 +27,6 @@ class Player {
     username: string,
     id: string = genRandomID()
   ) {
-    if (username == undefined) throw "error : no username given";
-    if (typeof username != "string" || username.length > 10)
-      throw "error : username is invalid";
     this.username = username;
     this.id = id;
 
