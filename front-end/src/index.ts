@@ -69,7 +69,7 @@ const initilizeMultiplayerLogic = () => {
   socket.on("connect", () => {
     console.log("connecté au serveur websocket");
 
-    socket.emit("join request", "Kysan721");
+    socket.emit("join request", localStorage.username);
     console.log("join request emitted");
   });
   socket.on("test", (msg) => console.log("test msg:", msg));
