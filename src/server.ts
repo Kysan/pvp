@@ -3,10 +3,10 @@ import express from "express";
 import http from "http";
 import Player, { PlayerDirection, PlayerState } from "./Player";
 import { genRandomPos, getTimestamp } from "./Utils";
-import { Socket } from "socket.io";
+import { Server, Socket } from "socket.io";
 
 const app = express();
-const port = 3000;
+const port = 5000;
 
 // ******************************************************** //
 // * sortir la fonction gameloop() de "chaque connexion"
@@ -16,117 +16,106 @@ const port = 3000;
 
 // * initialisation du serveur websocket
 const httpServer = http.createServer(app);
-const socketServer = require("socket.io")(httpServer);
-
+const socketServer: Server = new Server(httpServer, {
+  transports: ["websocket"],
+});
+// *
 // * pour servir les fichiers du jeu au client
 const staticFolderPath = path.join(__dirname, "../front-end/dist");
 app.use("/", express.static(staticFolderPath));
 
 // * contient tout les joueurs
-let players = {};
+let players: { [id: string]: Player } = {};
 let fireballs = [];
 
+// *
 // * gestion de la connexion avec un client
+
 socketServer.on("connection", (socket: Socket) => {
-  let connectedToRoom = false;
-  let player;
-  // * ping pour détecter les déconnexions ou les AFK
-  // *              /!\ system de ping incorrecte /!\
-  // * (il peut juste envoyer pong en boucle et ça vas lui rajouter du ttl)
-  let ttl: number = 5000;
-  let pid: string; // * pour identifier le player (Player ID)
-  let keys = {}; // * pour la gestion des inputs
+  console.log(`New player connected ${socket.id}`);
 
-  // * message envoyé quand l'utilisateur il veut se connecter au salon
-  // * rajouter un id de salon ?
-  socket.on("join", (username) => {
-    try {
-      let pos = genRandomPos();
-      player = new Player(pos.x, pos.y, username);
-      pid = player.getID();
-      players[pid] = player;
+  socket.on("join request", (username) => {
+    console.log(`user ${username} want to join the room`);
 
-      socket.broadcast.emit("player connected", player[pid].mapToNetwork());
-      connectedToRoom = true;
-    } catch {
-      socket.emit("alert", "username is invalid or already used"); // * on lui indique qu'il y a une erreur
-      socket.emit("info?"); // * on lui redemande ses infos
-    }
+    let { x, y } = genRandomPos(0, 0, 1024, 1024);
+
+    players[socket.id] = new Player(x, y, username, socket.id);
+    console.log("player joined successfuly");
+
+    const playerData = players[socket.id].mapToNetwork();
+    socket.emit("join request accepted", playerData);
+    socket.broadcast.emit("new player joined", playerData);
+
+    Object.keys(players).forEach((playerID) => {
+      socket.emit("new player joined", players[playerID].mapToNetwork());
+    });
+
+    // TODO : envoyer à tout les autres
   });
 
-  // * pour le deplacement
-  socket.on("keyup", (key: any) => {
-    keys[key] = true;
-  });
+  // * gestion du clavier
+
   socket.on("keydown", (key: any) => {
-    keys[key] = false;
+    players[socket.id].keys[key] = true;
+  });
+  socket.on("keyup", (key: any) => {
+    players[socket.id].keys[key] = false;
   });
 
-  socket.on("EXPLOSION!!!", (dir: Vector) => {
-    // * TODO
-    // * crée une fireball
-    // * envoie l'event à tout les client
-    // * rajouter son code d'update dans la fonction gameLoop()
+  // * gestion projectile
+  socket.on("EXPLOSIIOOOOON!!!", (direction) => {
+    socket.broadcast.emit("EXPLOSIIOOOOON!!!", socket.id, direction);
   });
 
-  // * gestion du ping
-  setInterval(() => {
-    // * pleins de chose à rajouter
-    // * stack avec les dernières question envoyé
-    // * vérifier les réponses dans on("pong")
-    socket.emit("ping");
-  }, 5000);
-
-  socket.on("pong", () => {
-    ttl += 5000;
+  // * gestion de la deconnection
+  socket.on("disconnect", (reason) => {
+    let { id: pid } = socket;
+    let { username } = players[pid];
+    delete players[socket.id];
+    console.log(`${username}<${pid}> vient d'être déconnecté`);
+    socket.broadcast.emit("player disconnected", pid);
   });
+});
 
-  let before = getTimestamp();
-  while (true) {
-    // * pour le deco
-    if (ttl <= 0) {
-      if (connectedToRoom) socket.broadcast.emit("disconnected", pid);
-      socket.emit("bye");
-      player = undefined;
-      return;
-    }
+// * boucle de jeu principale pour mettre à jours les deplacements des joueurs
 
-    // * temps écoulé depuis la dernière boucle
-    let now = getTimestamp();
-    let delta = before - now;
-    before = now; // * pour la prochaine boucle
-    // * seulement si je pplayer à été instancié
-    if (connectedToRoom) gameLoop(delta);
-  }
-
-  function gameLoop(delta) {
+const LATENCY = 0.05; // 50 ms
+const DELAY = LATENCY * 1000;
+setInterval(() => {
+  for (let pid in players) {
     let player: Player = players[pid];
-
+    const { keys } = player;
+    let { x, y } = player.position;
     if (keys["z"] || keys["q"] || keys["s"] || keys["d"]) {
-      player.setState(PlayerState.MOVING);
-      if (keys["q"]) {
-        player.setDirection(PlayerDirection.LEFT);
-        player.update(delta);
+      players[pid].setState(PlayerState.MOVING);
+
+      if (keys["z"]) {
+        players[pid].setDirection(PlayerDirection.UP);
+        players[pid].move(0, -player.speed * LATENCY);
       }
       if (keys["s"]) {
-        player.setDirection(PlayerDirection.LEFT);
-        player.update(delta);
+        players[pid].setDirection(PlayerDirection.DOWN);
+        players[pid].move(0, player.speed * LATENCY);
       }
+      if (keys["q"]) {
+        players[pid].setDirection(PlayerDirection.LEFT);
+        players[pid].move(-player.speed * LATENCY, 0);
+      }
+
       if (keys["d"]) {
-        player.setDirection(PlayerDirection.LEFT);
-        player.update(delta);
+        players[pid].setDirection(PlayerDirection.RIGHT);
+        players[pid].move(player.speed * LATENCY, 0);
       }
-      if (keys["f"]) {
-        player.setDirection(PlayerDirection.LEFT);
-        player.update(delta);
-      }
+      socketServer.emit("player update", player.mapToNetwork());
     } else {
-      player.setState(PlayerState.IDLING);
+      if (players[pid].state != PlayerState.IDLING) {
+        players[pid].setState(PlayerState.IDLING);
+        socketServer.emit("player update", player.mapToNetwork());
+      }
     }
     // * /!\ pas opti du tout (vraiment pas du tout :>) /!\
-    socket.broadcast.emit("player update", player.mapToNetwork());
   }
-});
+}, DELAY);
 
 // * lancement du serveur
 httpServer.listen(port, () => {

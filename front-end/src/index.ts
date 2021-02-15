@@ -1,8 +1,12 @@
 import * as PIXI from "pixi.js";
-import io from "socket.io-client";
+import { io, Socket } from "socket.io-client";
 import pixiSound from "pixi-sound";
-import Character, { Direction } from "./Character";
+import Character, { CharacterState, Direction } from "./Character";
 import AnimationManager from "./AnimationManager";
+
+while (localStorage.username == "" || !localStorage.username) {
+  localStorage.username = prompt("Quel est ton pseudo ?");
+}
 
 let app = new PIXI.Application({
   width: window.innerWidth,
@@ -16,14 +20,12 @@ gameDiv.appendChild(app.view);
 const loader = new PIXI.Loader();
 
 // * params
-let playerSpeed = 10;
-let fireballSpeed = playerSpeed * 2;
 
 // * game object
+let players: { [id: string]: Character } = {};
 let player: Character;
-let playerTextures = {};
-let ennemies = {};
 let fireBalls = [];
+const fireballSpeed = 20;
 let aimGraph: PIXI.Graphics;
 
 // * input management
@@ -31,7 +33,7 @@ let keys = {};
 let mousePos = { x: app.view.width / 2, y: app.view.height / 2 };
 
 // * mutiplayer
-let socket;
+let socket: Socket;
 
 // * on ajoute la texture du player
 loader.add("player", "assets/player.png");
@@ -45,15 +47,6 @@ loader.load(doneLoading);
 function doneLoading() {
   console.log("- * - finished loading textures - * -");
 
-  // * on crée le joueur
-  player = new Character(
-    app.view.width / 2,
-    app.view.height / 2,
-    new AnimationManager(loader.resources["player"]),
-    "Kysan(updatethis)"
-  );
-  app.stage.addChild(player);
-
   // * le viseur pour les sorts
   aimGraph = new PIXI.Graphics();
   app.stage.addChild(aimGraph);
@@ -64,20 +57,114 @@ function doneLoading() {
 
   // * on lance la logique du jeu
   grabMouseAndKeyboard();
-  app.ticker.add((delta) => gameLoop(delta));
 
   // * on lance la logique du multijoueur
-  handleMultiplayerLogic();
+  initilizeMultiplayerLogic();
 }
 
-function handleMultiplayerLogic() {
-  socket = io.io(document.location.href);
-  socket.on("connect", function () {
-    console.log("connected");
+const initilizeMultiplayerLogic = () => {
+  socket = io({
+    transports: ["websocket"],
+  }); /// "ws://localhost:5000"
+  socket.on("connect", () => {
+    console.log("connecté au serveur websocket");
+
+    socket.emit("join request", "Kysan721");
+    console.log("join request emitted");
   });
-  socket.on("event", function (data) {});
-  socket.on("disconnect", function () {});
-}
+  socket.on("test", (msg) => console.log("test msg:", msg));
+
+  // * le joueur est connecté avec succès
+
+  socket.on("join request accepted", (playerData) => {
+    let {
+      position: { x, y },
+      speed,
+      id,
+      username,
+    } = playerData;
+
+    console.log("Vous avez rejoint la partie.");
+    console.log("player data:", playerData);
+
+    let playerAnimationManager = new AnimationManager(
+      loader.resources["player"]
+    );
+    player = new Character(x, y, playerAnimationManager, speed, id, username);
+    app.stage.addChild(player);
+
+    // * le joueur est instancié on lance le reste du jeu
+    app.ticker.add((delta) => gameLoop(delta));
+  });
+
+  socket.on("new player joined", (playerData) => {
+    if (playerData.id == player.id) return;
+
+    let {
+      position: { x, y },
+      speed,
+      id,
+      username,
+    } = playerData;
+    console.log(`${username}<${id}> vient de rejoindre la partie !`);
+    console.log("player data:", playerData);
+
+    let playerAnimationManager = new AnimationManager(
+      loader.resources["player"]
+    );
+
+    players[id] = new Character(
+      x,
+      y,
+      playerAnimationManager,
+      speed,
+      id,
+      username
+    );
+    app.stage.addChild(players[id]);
+  });
+
+  socket.on("player disconnected", (pid, reason) => {
+    let { username } = players[pid];
+    console.log(`${username}<${pid}> est déconnecté.`);
+    app.stage.removeChild(players[pid]);
+    delete players[pid];
+  });
+
+  // * gérer la deconnexion !!!!
+  socket.on("disconnect", () => {
+    console.log(`Vous venez d'être déconnecté.`);
+    // * pour enlever les bugs de duplications au rechargement de serveur
+    app.stage.removeChild(player);
+    player = undefined;
+  });
+
+  // * gestion des deplacements
+  socket.on("player update", (playerData) => {
+    let {
+      id,
+      position: { x, y },
+      direction,
+      state,
+    } = playerData;
+    if (id == player.id) {
+      player.setAbsolutPosition(x, y);
+      player.setDirection(direction);
+      player.setState(state);
+    } else {
+      players[id].setAbsolutPosition(x, y);
+      players[id].setDirection(direction);
+      players[id].setState(state);
+    }
+  });
+
+  // * gestion des tirs
+  socket.on("EXPLOSIIOOOOON!!!", (id, direction) => {
+    console.log(id, direction);
+    let fireball = createFireBall(players[id].x, players[id].y, direction);
+    fireBalls.push(fireball);
+  });
+};
 
 function grabMouseAndKeyboard() {
   // * mouse handling
@@ -95,34 +182,40 @@ function grabMouseAndKeyboard() {
   gameDiv.addEventListener("pointerdown", handleFireBallCast);
 
   // * keyboard handling
-  window.addEventListener("keydown", (e) => {
-    console.log("keydown : ", e.key);
-    keys[e.key] = true;
-    //* keys[]
+  window.addEventListener("keydown", ({ key }) => {
+    console.log("keydown : ", key);
+    if (!keys[key]) {
+      keys[key] = true;
+      socket.emit("keydown", key);
+    }
   });
 
-  window.addEventListener("keyup", (e) => {
-    keys[e.key] = false;
-    console.log("keyup : ", e.key);
+  window.addEventListener("keyup", ({ key }) => {
+    keys[key] = false;
+    socket.emit("keyup", key);
+    // console.log("keyup : ", key);
   });
 }
 
 function handleFireBallCast(e) {
+  if (!player) return;
   // * direction: vecteur entre le joueur et la ou vise le curseur
   let radAngle = Math.atan2(mousePos.y - player.y, mousePos.x - player.x);
   let direction = { x: Math.cos(radAngle), y: Math.sin(radAngle) };
-  let fireBall = createFireBall(direction, radAngle);
+  let fireBall = createFireBall(player.x, player.y, direction);
+  socket.emit("EXPLOSIIOOOOON!!!", direction);
   fireBalls.push(fireBall);
 }
 
-function createFireBall(direction, angle) {
+// * crée une boule de feu qui part de la position donné dans la direction donnée
+function createFireBall(x, y, direction) {
   let fireball = new PIXI.Sprite(loader.resources["fireball"].texture);
+
   fireball.anchor.set(0.5);
   fireball.scale.set(0.3);
-  // * part du player
-  fireball.x = player.x;
-  fireball.y = player.y;
-  fireball.rotation = angle;
+
+  fireball.x = x;
+  fireball.y = y;
   app.stage.addChild(fireball);
   return { sprite: fireball, direction, speed: fireballSpeed };
 }
@@ -186,28 +279,7 @@ function updateFireBalls(delta) {
 
 function handleKeyboard(delta) {
   if (keys["z"] || keys["q"] || keys["s"] || keys["d"]) {
-    if (!player.playing) {
-      player.play();
-    }
-
-    if (keys["z"]) {
-      player.y -= playerSpeed * delta;
-      player.setDirection(Direction.UP);
-    }
-    if (keys["q"]) {
-      player.x -= playerSpeed * delta;
-      player.setDirection(Direction.LEFT);
-    }
-    if (keys["s"]) {
-      player.y += playerSpeed * delta;
-      player.setDirection(Direction.DOWN);
-    }
-    if (keys["d"]) {
-      player.x += playerSpeed * delta;
-      player.setDirection(Direction.RIGHT);
-    }
-  } else {
-    player.gotoAndStop(0);
+    // * le deplacement se calcul dans le backend
   }
 }
 

@@ -27,8 +27,9 @@ var express_1 = __importDefault(require("express"));
 var http_1 = __importDefault(require("http"));
 var Player_1 = __importStar(require("./Player"));
 var Utils_1 = require("./Utils");
+var socket_io_1 = require("socket.io");
 var app = express_1.default();
-var port = 3000;
+var port = 5000;
 // ******************************************************** //
 // * sortir la fonction gameloop() de "chaque connexion"
 // * sinon les ressources du serveur risques d'être limité
@@ -36,108 +37,90 @@ var port = 3000;
 // ******************************************************** //
 // * initialisation du serveur websocket
 var httpServer = http_1.default.createServer(app);
-var socketServer = require("socket.io")(httpServer);
+var socketServer = new socket_io_1.Server(httpServer, {
+    transports: ["websocket"],
+});
+// *
 // * pour servir les fichiers du jeu au client
 var staticFolderPath = path_1.default.join(__dirname, "../front-end/dist");
 app.use("/", express_1.default.static(staticFolderPath));
 // * contient tout les joueurs
 var players = {};
 var fireballs = [];
+// *
 // * gestion de la connexion avec un client
 socketServer.on("connection", function (socket) {
-    var connectedToRoom = false;
-    var player;
-    // * ping pour détecter les déconnexions ou les AFK
-    // *              /!\ system de ping incorrecte /!\
-    // * (il peut juste envoyer pong en boucle et ça vas lui rajouter du ttl)
-    var ttl = 5000;
-    var pid; // * pour identifier le player (Player ID)
-    var keys = {}; // * pour la gestion des inputs
-    // * message envoyé quand l'utilisateur il veut se connecter au salon
-    // * rajouter un id de salon ?
-    socket.on("join", function (username) {
-        try {
-            var pos = Utils_1.genRandomPos();
-            player = new Player_1.default(pos.x, pos.y, username);
-            pid = player.getID();
-            players[pid] = player;
-            socket.broadcast.emit("player connected", player[pid].mapToNetwork());
-            connectedToRoom = true;
-        }
-        catch (_a) {
-            socket.emit("alert", "username is invalid or already used"); // * on lui indique qu'il y a une erreur
-            socket.emit("info?"); // * on lui redemande ses infos
-        }
+    console.log("New player connected " + socket.id);
+    socket.on("join request", function (username) {
+        console.log("user " + username + " want to join the room");
+        var _a = Utils_1.genRandomPos(0, 0, 1024, 1024), x = _a.x, y = _a.y;
+        players[socket.id] = new Player_1.default(x, y, username, socket.id);
+        console.log("player joined successfuly");
+        var playerData = players[socket.id].mapToNetwork();
+        socket.emit("join request accepted", playerData);
+        socket.broadcast.emit("new player joined", playerData);
+        Object.keys(players).forEach(function (playerID) {
+            socket.emit("new player joined", players[playerID].mapToNetwork());
+        });
+        // TODO : envoyer à tout les autres
     });
-    // * pour le deplacement
-    socket.on("keyup", function (key) {
-        keys[key] = true;
-    });
+    // * gestion du clavier
     socket.on("keydown", function (key) {
-        keys[key] = false;
+        players[socket.id].keys[key] = true;
     });
-    socket.on("EXPLOSION!!!", function (dir) {
-        // * TODO
-        // * crée une fireball
-        // * envoie l'event à tout les client
-        // * rajouter son code d'update dans la fonction gameLoop()
+    socket.on("keyup", function (key) {
+        players[socket.id].keys[key] = false;
     });
-    // * gestion du ping
-    setInterval(function () {
-        // * pleins de chose à rajouter
-        // * stack avec les dernières question envoyé
-        // * vérifier les réponses dans on("pong")
-        socket.emit("ping");
-    }, 5000);
-    socket.on("pong", function () {
-        ttl += 5000;
+    // * gestion projectile
+    socket.on("EXPLOSIIOOOOON!!!", function (direction) {
+        socket.broadcast.emit("EXPLOSIIOOOOON!!!", socket.id, direction);
     });
-    var before = Utils_1.getTimestamp();
-    while (true) {
-        // * pour le deco
-        if (ttl <= 0) {
-            if (connectedToRoom)
-                socket.broadcast.emit("disconnected", pid);
-            socket.emit("bye");
-            player = undefined;
-            return;
-        }
-        // * temps écoulé depuis la dernière boucle
-        var now = Utils_1.getTimestamp();
-        var delta = before - now;
-        before = now; // * pour la prochaine boucle
-        // * seulement si je pplayer à été instancié
-        if (connectedToRoom)
-            gameLoop(delta);
-    }
-    function gameLoop(delta) {
+    // * gestion de la deconnection
+    socket.on("disconnect", function (reason) {
+        var pid = socket.id;
+        var username = players[pid].username;
+        delete players[socket.id];
+        console.log(username + "<" + pid + "> vient d'\u00EAtre d\u00E9connect\u00E9");
+        socket.broadcast.emit("player disconnected", pid);
+    });
+});
+// * boucle de jeu principale pour mettre à jours les deplacements des joueurs
+var LATENCY = 0.05; // 50 ms
+var DELAY = LATENCY * 1000;
+setInterval(function () {
+    for (var pid in players) {
         var player = players[pid];
+        var keys = player.keys;
+        var _a = player.position, x = _a.x, y = _a.y;
         if (keys["z"] || keys["q"] || keys["s"] || keys["d"]) {
-            player.setState(Player_1.PlayerState.MOVING);
-            if (keys["q"]) {
-                player.setDirection(Player_1.PlayerDirection.LEFT);
-                player.update(delta);
+            players[pid].setState(Player_1.PlayerState.MOVING);
+            if (keys["z"]) {
+                players[pid].setDirection(Player_1.PlayerDirection.UP);
+                players[pid].move(0, -player.speed * LATENCY);
             }
             if (keys["s"]) {
-                player.setDirection(Player_1.PlayerDirection.LEFT);
-                player.update(delta);
+                players[pid].setDirection(Player_1.PlayerDirection.DOWN);
+                players[pid].move(0, player.speed * LATENCY);
+            }
+            if (keys["q"]) {
+                players[pid].setDirection(Player_1.PlayerDirection.LEFT);
+                players[pid].move(-player.speed * LATENCY, 0);
             }
             if (keys["d"]) {
-                player.setDirection(Player_1.PlayerDirection.LEFT);
-                player.update(delta);
+                players[pid].setDirection(Player_1.PlayerDirection.RIGHT);
+                players[pid].move(player.speed * LATENCY, 0);
             }
-            if (keys["f"]) {
-                player.setDirection(Player_1.PlayerDirection.LEFT);
-                player.update(delta);
-            }
+            socketServer.emit("player update", player.mapToNetwork());
         }
         else {
-            player.setState(Player_1.PlayerState.IDLING);
+            if (players[pid].state != Player_1.PlayerState.IDLING) {
+                players[pid].setState(Player_1.PlayerState.IDLING);
+                socketServer.emit("player update", player.mapToNetwork());
+            }
         }
         // * /!\ pas opti du tout (vraiment pas du tout :>) /!\
-        socket.broadcast.emit("player update", player.mapToNetwork());
     }
-});
+}, DELAY);
 // * lancement du serveur
 httpServer.listen(port, function () {
     console.log("Game server started and listening at http://localhost:" + port);

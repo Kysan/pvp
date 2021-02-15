@@ -13,13 +13,13 @@ enum PlayerDirection {
 }
 
 class Player {
-  private username: string;
-  private position: Vector;
-  private state: PlayerState; // * je sais pas encore int? enum? (c'est la même chose mais il faut que le définisse)
+  public readonly username: string;
+  public position: Vector;
+  public state: PlayerState; // * je sais pas encore int? enum? (c'est la même chose mais il faut que le définisse)
   private direction: PlayerDirection;
   private readonly id: string;
-  private speed: number;
-  private alive: boolean;
+  public readonly speed: number;
+  public keys: { [key: string]: boolean };
 
   constructor(
     x: number,
@@ -37,38 +37,14 @@ class Player {
     this.position = { x, y };
 
     // * devrais être chargé depuis un fichier de configuration
-    this.speed = 10;
-
-    // * devrais être remplacer par des points de vie ?
-    this.alive = true;
-  }
-
-  // * doit être appeler spécifiquement après chque modification du joueur
-  update(delta: number) {
-    let x: number, y: number;
-    if (this.direction == PlayerDirection.UP) {
-      y = -1;
-    }
-    if (this.direction == PlayerDirection.DOWN) {
-      y = 1;
-    }
-    if (this.direction == PlayerDirection.LEFT) {
-      x = -1;
-    }
-    if (this.direction == PlayerDirection.RIGHT) {
-      x = 1;
-    }
-
-    if (this.state == PlayerState.MOVING) {
-      this.move(x * this.speed * delta, y * this.speed * delta);
-    }
+    this.speed = 400; //
+    this.keys = {};
   }
 
   // * update la position de manière relative et la retourne
-  move(x: number, y: number): Vector {
+  move(x: number, y: number): void {
     this.position.x += x;
     this.position.y += y;
-    return this.position;
   }
 
   // * update la position de manière absolue
@@ -83,8 +59,8 @@ class Player {
 
   // * convertie l'objet en json plus simple
   public mapToNetwork(): any {
-    let { id, username, position, state, direction } = this;
-    return { id, username, position, state, direction };
+    let { id, username, position, state, direction, speed } = this;
+    return { id, username, position, state, direction, speed };
   }
 
   // * recoding React LOL

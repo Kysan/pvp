@@ -28,34 +28,13 @@ var Player = /** @class */ (function () {
         // * faire en fonciton de spawn points ?
         this.position = { x: x, y: y };
         // * devrais être chargé depuis un fichier de configuration
-        this.speed = 10;
-        // * devrais être remplacer par des points de vie ?
-        this.alive = true;
+        this.speed = 400; //
+        this.keys = {};
     }
-    // * doit être appeler spécifiquement après chque modification du joueur
-    Player.prototype.update = function (delta) {
-        var x, y;
-        if (this.direction == PlayerDirection.UP) {
-            y = -1;
-        }
-        if (this.direction == PlayerDirection.DOWN) {
-            y = 1;
-        }
-        if (this.direction == PlayerDirection.LEFT) {
-            x = -1;
-        }
-        if (this.direction == PlayerDirection.RIGHT) {
-            x = 1;
-        }
-        if (this.state == PlayerState.MOVING) {
-            this.move(x * this.speed * delta, y * this.speed * delta);
-        }
-    };
     // * update la position de manière relative et la retourne
     Player.prototype.move = function (x, y) {
         this.position.x += x;
         this.position.y += y;
-        return this.position;
     };
     // * update la position de manière absolue
     Player.prototype.setPosition = function (x, y) {
@@ -67,8 +46,8 @@ var Player = /** @class */ (function () {
     };
     // * convertie l'objet en json plus simple
     Player.prototype.mapToNetwork = function () {
-        var _a = this, id = _a.id, username = _a.username, position = _a.position, state = _a.state, direction = _a.direction;
-        return { id: id, username: username, position: position, state: state, direction: direction };
+        var _a = this, id = _a.id, username = _a.username, position = _a.position, state = _a.state, direction = _a.direction, speed = _a.speed;
+        return { id: id, username: username, position: position, state: state, direction: direction, speed: speed };
     };
     // * recoding React LOL
     Player.prototype.setState = function (state) {

@@ -19,22 +19,27 @@ class Character extends PIXI.AnimatedSprite {
   private animationManager: AnimationManager;
   private direction: Direction;
   private state: CharacterState;
-  private username: string;
+  public readonly username: string;
+  public id: string;
   public speed: number;
 
   constructor(
     x: number,
     y: number,
     animationManager: AnimationManager,
-    username?: string
+    speed: number,
+    id: string,
+    username: string
   ) {
     super(animationManager.getTextures(Direction.DOWN));
     this.username = username;
+    this.id = id;
     this.x = x;
     this.y = y;
     this.anchor.set(0.5, 0.5);
     this.animationSpeed = 0.1;
     this.scale.set(3, 3);
+    this.speed = speed;
 
     this.animationManager = animationManager;
     this.play();
@@ -45,6 +50,11 @@ class Character extends PIXI.AnimatedSprite {
       this.direction = newDirection;
       this.textures = this.animationManager.getTextures(newDirection);
     }
+  }
+
+  public setAbsolutPosition(x: number, y: number) {
+    this.x = x;
+    this.y = y;
   }
 
   public setState(state: CharacterState) {
