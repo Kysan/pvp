@@ -29,25 +29,18 @@ var Player_1 = __importStar(require("./Player"));
 var Utils_1 = require("./Utils");
 var socket_io_1 = require("socket.io");
 var app = express_1.default();
-var port = 5000;
-// ******************************************************** //
-// * sortir la fonction gameloop() de "chaque connexion"
-// * sinon les ressources du serveur risques d'être limité
-// * à cause de la boucle while
-// ******************************************************** //
-// * initialisation du serveur websocket
+var port = process.env.pvpport || 80;
 var httpServer = http_1.default.createServer(app);
 var socketServer = new socket_io_1.Server(httpServer, {
     transports: ["websocket"],
 });
-// *
 // * pour servir les fichiers du jeu au client
 var staticFolderPath = path_1.default.join(__dirname, "../front-end/dist");
 app.use("/", express_1.default.static(staticFolderPath));
 // * contient tout les joueurs
 var players = {};
+// * pour calculer les collisions plus tards
 var fireballs = [];
-// *
 // * gestion de la connexion avec un client
 socketServer.on("connection", function (socket) {
     console.log("New player connected " + socket.id);
@@ -84,7 +77,7 @@ socketServer.on("connection", function (socket) {
         socket.broadcast.emit("keyup", socket.id, key);
         socket.emit("keyup", socket.id, key);
     });
-    // * gestion projectile
+    // * gestion des projectiles
     socket.on("EXPLOSIIOOOOON!!!", function (direction) {
         socket.broadcast.emit("EXPLOSIIOOOOON!!!", socket.id, direction);
     });
