@@ -22,6 +22,7 @@ class Character extends PIXI.AnimatedSprite {
   public readonly username: string;
   public id: string;
   public speed: number;
+  public keys: { [key: string]: boolean };
 
   constructor(
     x: number,
@@ -40,8 +41,9 @@ class Character extends PIXI.AnimatedSprite {
     this.animationSpeed = 0.1;
     this.scale.set(3, 3);
     this.speed = speed;
-
+    this.keys = {};
     this.animationManager = animationManager;
+
     this.play();
   }
 
@@ -55,6 +57,10 @@ class Character extends PIXI.AnimatedSprite {
   public setAbsolutPosition(x: number, y: number) {
     this.x = x;
     this.y = y;
+  }
+  public move(x: number, y: number) {
+    this.x += x;
+    this.y += y;
   }
 
   public setState(state: CharacterState) {

@@ -43,23 +43,35 @@ socketServer.on("connection", (socket: Socket) => {
     console.log("player joined successfuly");
 
     const playerData = players[socket.id].mapToNetwork();
-    socket.emit("join request accepted", playerData);
+    // * il detectera tout seul que c'est lui même car l'id du joueur est le même que celui de sa session socket
+    socket.emit("new player joined", playerData);
     socket.broadcast.emit("new player joined", playerData);
 
+    // * on envoie tout les joueurs déjà présent au nouveau joueur
     Object.keys(players).forEach((playerID) => {
-      socket.emit("new player joined", players[playerID].mapToNetwork());
+      if (playerID != socket.id)
+        socket.emit("new player joined", players[playerID].mapToNetwork());
     });
-
-    // TODO : envoyer à tout les autres
   });
 
   // * gestion du clavier
 
   socket.on("keydown", (key: any) => {
+    // * pour gérer le bug du alt tab qui crée des touches qui ne sont jamais released
+    if (key == "Alt") {
+      for (let key in players[socket.id].keys)
+        socket.broadcast.emit("keyup", socket.id, key);
+      players[socket.id].keys = {};
+      return;
+    }
     players[socket.id].keys[key] = true;
+    socket.broadcast.emit("keydown", socket.id, key);
+    socket.emit("keydown", socket.id, key);
   });
   socket.on("keyup", (key: any) => {
     players[socket.id].keys[key] = false;
+    socket.broadcast.emit("keyup", socket.id, key);
+    socket.emit("keyup", socket.id, key);
   });
 
   // * gestion projectile
@@ -106,6 +118,7 @@ setInterval(() => {
         players[pid].setDirection(PlayerDirection.RIGHT);
         players[pid].move(player.speed * LATENCY, 0);
       }
+      // ON LES REMETERAS PLUS TARD POUR CORRIGER LES ERREURS DE CALCUL COTE CLIENT
       socketServer.emit("player update", player.mapToNetwork());
     } else {
       if (players[pid].state != PlayerState.IDLING) {
@@ -113,7 +126,7 @@ setInterval(() => {
         socketServer.emit("player update", player.mapToNetwork());
       }
     }
-    // * /!\ pas opti du tout (vraiment pas du tout :>) /!\
+    // * /!\ étrange le javascript /!\
   }
 }, DELAY);
 

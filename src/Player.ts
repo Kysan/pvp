@@ -15,7 +15,7 @@ enum PlayerDirection {
 class Player {
   public readonly username: string;
   public position: Vector;
-  public state: PlayerState; // * je sais pas encore int? enum? (c'est la même chose mais il faut que le définisse)
+  public state: PlayerState;
   private direction: PlayerDirection;
   private readonly id: string;
   public readonly speed: number;
@@ -30,11 +30,11 @@ class Player {
     this.username = username;
     this.id = id;
 
-    // * faire en fonciton de spawn points ?
+    // * faire en fonction de spawn points ?
     this.position = { x, y };
 
-    // * devrais être chargé depuis un fichier de configuration
-    this.speed = 400; //
+    // * devrait être chargé depuis un fichier de configuration
+    this.speed = 600; //
     this.keys = {};
   }
 
@@ -49,18 +49,12 @@ class Player {
     this.position = { x, y };
   }
 
-  // * retourne l'id du joueur
-  getID(): string {
-    return this.id;
-  }
-
   // * convertie l'objet en json plus simple
   public mapToNetwork(): any {
     let { id, username, position, state, direction, speed } = this;
     return { id, username, position, state, direction, speed };
   }
 
-  // * recoding React LOL
   public setState(state: PlayerState) {
     this.state = state;
   }

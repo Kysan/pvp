@@ -23,7 +23,6 @@ const loader = new PIXI.Loader();
 
 // * game object
 let players: { [id: string]: Character } = {};
-let player: Character;
 let fireBalls = [];
 const fireballSpeed = 20;
 let aimGraph: PIXI.Graphics;
@@ -74,54 +73,38 @@ const initilizeMultiplayerLogic = () => {
   });
   socket.on("test", (msg) => console.log("test msg:", msg));
 
-  // * le joueur est connecté avec succès
+  socket.on(
+    "new player joined",
+    ({ position: { x, y }, speed, id, username }) => {
+      let playerAnimationManager = new AnimationManager(
+        loader.resources["player"]
+      );
 
-  socket.on("join request accepted", (playerData) => {
-    let {
-      position: { x, y },
-      speed,
-      id,
-      username,
-    } = playerData;
+      players[id] = new Character(
+        x,
+        y,
+        playerAnimationManager,
+        speed,
+        id,
+        username
+      );
+      app.stage.addChild(players[id]);
 
-    console.log("Vous avez rejoint la partie.");
-    console.log("player data:", playerData);
+      if (id == socket.id) {
+        console.log("Vous avez rejoint la partie.");
+        // * le joueur est instancié on lance le reste du jeu
+        app.ticker.add((delta) => gameLoop(delta));
+      } else {
+        console.log(`${username}<${id}> vient de rejoindre la partie !`);
+      }
+    }
+  );
 
-    let playerAnimationManager = new AnimationManager(
-      loader.resources["player"]
-    );
-    player = new Character(x, y, playerAnimationManager, speed, id, username);
-    app.stage.addChild(player);
-
-    // * le joueur est instancié on lance le reste du jeu
-    app.ticker.add((delta) => gameLoop(delta));
-  });
-
-  socket.on("new player joined", (playerData) => {
-    if (playerData.id == player.id) return;
-
-    let {
-      position: { x, y },
-      speed,
-      id,
-      username,
-    } = playerData;
-    console.log(`${username}<${id}> vient de rejoindre la partie !`);
-    console.log("player data:", playerData);
-
-    let playerAnimationManager = new AnimationManager(
-      loader.resources["player"]
-    );
-
-    players[id] = new Character(
-      x,
-      y,
-      playerAnimationManager,
-      speed,
-      id,
-      username
-    );
-    app.stage.addChild(players[id]);
+  // * gestion des deplacements
+  socket.on("player update", ({ id, position: { x, y }, direction, state }) => {
+    players[id].setAbsolutPosition(x, y);
+    players[id].setDirection(direction);
+    players[id].setState(state);
   });
 
   socket.on("player disconnected", (pid, reason) => {
@@ -135,27 +118,16 @@ const initilizeMultiplayerLogic = () => {
   socket.on("disconnect", () => {
     console.log(`Vous venez d'être déconnecté.`);
     // * pour enlever les bugs de duplications au rechargement de serveur
-    app.stage.removeChild(player);
-    player = undefined;
+    app.stage.removeChild(players[socket.id]);
+    delete players[socket.id];
   });
 
-  // * gestion des deplacements
-  socket.on("player update", (playerData) => {
-    let {
-      id,
-      position: { x, y },
-      direction,
-      state,
-    } = playerData;
-    if (id == player.id) {
-      player.setAbsolutPosition(x, y);
-      player.setDirection(direction);
-      player.setState(state);
-    } else {
-      players[id].setAbsolutPosition(x, y);
-      players[id].setDirection(direction);
-      players[id].setState(state);
-    }
+  // * nouvelle gestion des déplacements
+  socket.on("keydown", (pid: string, key: any) => {
+    players[pid].keys[key] = true;
+  });
+  socket.on("keyup", (pid: string, key: any) => {
+    players[pid].keys[key] = false;
   });
 
   // * gestion des tirs
@@ -198,8 +170,9 @@ function grabMouseAndKeyboard() {
 }
 
 function handleFireBallCast(e) {
-  if (!player) return;
-  // * direction: vecteur entre le joueur et la ou vise le curseur
+  if (!socket.id) return;
+  const player = players[socket.id];
+  // * direction: vecteur entre le joueur et le curseur
   let radAngle = Math.atan2(mousePos.y - player.y, mousePos.x - player.x);
   let direction = { x: Math.cos(radAngle), y: Math.sin(radAngle) };
   let fireBall = createFireBall(player.x, player.y, direction);
@@ -207,6 +180,7 @@ function handleFireBallCast(e) {
   fireBalls.push(fireBall);
 }
 
+// * TODO : faire une classe
 // * crée une boule de feu qui part de la position donné dans la direction donnée
 function createFireBall(x, y, direction) {
   let fireball = new PIXI.Sprite(loader.resources["fireball"].texture);
@@ -220,6 +194,7 @@ function createFireBall(x, y, direction) {
   return { sprite: fireball, direction, speed: fireballSpeed };
 }
 
+// * TODO : mettre tout ça dans un fichier annexe
 function norme(x, y) {
   return Math.sqrt(x * x + y * y);
 }
@@ -235,6 +210,7 @@ function scale(vect, size) {
 
 // * pour dessiner le pointeur entre le player et curseur
 function drawAim() {
+  const player = players[socket.id];
   let p1 = { x: player.x, y: player.y };
   let p2 = { x: mousePos.x, y: mousePos.y };
 
@@ -251,7 +227,7 @@ function drawAim() {
     .lineTo(player.x + offset2.x, player.y + offset2.y);
 }
 
-function isSpriteOutOfScreen(sprite) {
+function isSpriteOutOfScreen(sprite: PIXI.Sprite) {
   let outOfScreen =
     sprite.x + sprite.width * sprite.anchor.x < 0 ||
     sprite.x - sprite.width * sprite.anchor.x > app.view.width ||
@@ -260,7 +236,7 @@ function isSpriteOutOfScreen(sprite) {
   return outOfScreen;
 }
 
-function updateFireBalls(delta) {
+function updateFireBalls(delta: number) {
   for (let k = 0; k < fireBalls.length; ++k) {
     let { direction, speed, sprite } = fireBalls[k];
     sprite.x += direction.x * speed * delta;
@@ -277,15 +253,46 @@ function updateFireBalls(delta) {
   }
 }
 
-function handleKeyboard(delta) {
-  if (keys["z"] || keys["q"] || keys["s"] || keys["d"]) {
-    // * le deplacement se calcul dans le backend
+function handleKeyboard(delta: number) {
+  // * un peu excesif de tout faire passer par le backend ?
+  let { keys } = players[socket.id];
+  if (keys["²"]) {
+    console.log("test");
   }
 }
 
-function gameLoop(delta) {
+// en gros
+// pour rendre les déplacements des joueurs plus fluide
+// on va faire comme si ils envoyaient les inputs directement dans notre client
+// ça va supprimer l'effet de téléportation avec l'ancien protocole
+function handlePlayersMovement(delta: number) {
+  delta = delta * 0.01;
+  for (let id in players) {
+    let { keys, speed } = players[id];
+
+    if (keys["q"]) {
+      players[id].move(-speed * delta, 0);
+      players[id].setDirection(Direction.LEFT);
+    }
+    if (keys["d"]) {
+      players[id].move(speed * delta, 0);
+      players[id].setDirection(Direction.RIGHT);
+    }
+    if (keys["z"]) {
+      players[id].move(0, -speed * delta);
+      players[id].setDirection(Direction.UP);
+    }
+    if (keys["s"]) {
+      players[id].move(0, speed * delta);
+      players[id].setDirection(Direction.DOWN);
+    }
+  }
+}
+
+function gameLoop(delta: number) {
   //   console.log("temps écoulé depuis la dernière frame: ", delta);
   updateFireBalls(delta);
+  handlePlayersMovement(delta);
   handleKeyboard(delta);
   drawAim();
 }

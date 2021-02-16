@@ -57,19 +57,32 @@ socketServer.on("connection", function (socket) {
         players[socket.id] = new Player_1.default(x, y, username, socket.id);
         console.log("player joined successfuly");
         var playerData = players[socket.id].mapToNetwork();
-        socket.emit("join request accepted", playerData);
+        // * il detectera tout seul que c'est lui même car l'id du joueur est le même que celui de sa session socket
+        socket.emit("new player joined", playerData);
         socket.broadcast.emit("new player joined", playerData);
+        // * on envoie tout les joueurs déjà présent au nouveau joueur
         Object.keys(players).forEach(function (playerID) {
-            socket.emit("new player joined", players[playerID].mapToNetwork());
+            if (playerID != socket.id)
+                socket.emit("new player joined", players[playerID].mapToNetwork());
         });
-        // TODO : envoyer à tout les autres
     });
     // * gestion du clavier
     socket.on("keydown", function (key) {
+        // * pour gérer le bug du alt tab qui crée des touches qui ne sont jamais released
+        if (key == "Alt") {
+            for (var key_1 in players[socket.id].keys)
+                socket.broadcast.emit("keyup", socket.id, key_1);
+            players[socket.id].keys = {};
+            return;
+        }
         players[socket.id].keys[key] = true;
+        socket.broadcast.emit("keydown", socket.id, key);
+        socket.emit("keydown", socket.id, key);
     });
     socket.on("keyup", function (key) {
         players[socket.id].keys[key] = false;
+        socket.broadcast.emit("keyup", socket.id, key);
+        socket.emit("keyup", socket.id, key);
     });
     // * gestion projectile
     socket.on("EXPLOSIIOOOOON!!!", function (direction) {
@@ -110,6 +123,7 @@ setInterval(function () {
                 players[pid].setDirection(Player_1.PlayerDirection.RIGHT);
                 players[pid].move(player.speed * LATENCY, 0);
             }
+            // ON LES REMETERAS PLUS TARD POUR CORRIGER LES ERREURS DE CALCUL COTE CLIENT
             socketServer.emit("player update", player.mapToNetwork());
         }
         else {
@@ -118,7 +132,7 @@ setInterval(function () {
                 socketServer.emit("player update", player.mapToNetwork());
             }
         }
-        // * /!\ pas opti du tout (vraiment pas du tout :>) /!\
+        // * /!\ étrange le javascript /!\
     }
 }, DELAY);
 // * lancement du serveur
